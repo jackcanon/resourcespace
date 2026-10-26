@@ -20,7 +20,7 @@
         "chartjs-adapter-date-fns": "^3.0.0",
         "chosen-js": "^1.8.7",
         "date-fns": "^2.30.0",
-        "dompurify": "^3.4.8",
+        "dompurify": "^3.4.17",
         "heatmap.js": "^2.0.5",
         "jcrop": "github:tapmodo/Jcrop#v0.9.15",
         "jquery": "^3.6.0",

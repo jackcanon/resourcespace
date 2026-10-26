@@ -25,7 +25,9 @@ class_exists(\Symfony\Component\VarExporter\Internal\LazyObjectState::class);
  */
 class RedisCluster6Proxy extends \RedisCluster implements ResetInterface, LazyObjectInterface
 {
-    use RedisCluster6ProxyTrait;
+    use RedisCluster61ProxyTrait;
+    use RedisCluster62ProxyTrait;
+    use RedisCluster63ProxyTrait;
     use LazyProxyTrait {
         resetLazyObject as reset;
     }
@@ -34,7 +36,7 @@ class RedisCluster6Proxy extends \RedisCluster implements ResetInterface, LazyOb
 
     public function __construct($name, $seeds = null, $timeout = 0, $read_timeout = 0, $persistent = false, #[\SensitiveParameter] $auth = null, $context = null)
     {
-        return ($this->lazyObjectState->realInstance ??= ($this->lazyObjectState->initializer)())->__construct(...\func_get_args());
+        ($this->lazyObjectState->realInstance ??= ($this->lazyObjectState->initializer)())->__construct(...\func_get_args());
     }
 
     public function _compress($value): string

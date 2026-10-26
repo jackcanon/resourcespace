@@ -84,7 +84,7 @@
         "symfony/var-exporter": "^6.4",
         "symfony/yaml": "^6.4",
         "twig/intl-extra": "^3.7",
-        "twig/twig": "^3.14.0",
+        "twig/twig": "^3.26.0",
         "simplesamlphp/simplesamlphp-module-authorize": "~1.6.1",
         "simplesamlphp/simplesamlphp-module-consent": "~1.4.0",
         "simplesamlphp/simplesamlphp-module-consentadmin": "~1.1.0",

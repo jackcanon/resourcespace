@@ -13,13 +13,16 @@ namespace Symfony\Bundle\FrameworkBundle\Command;
 
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\Console\Exception\RuntimeException;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Dumper\Preloader;
 use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Filesystem\Exception\IOException;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Finder\Finder;
@@ -56,12 +59,12 @@ class CacheClearCommand extends Command
                 new InputOption('no-optional-warmers', '', InputOption::VALUE_NONE, 'Skip optional cache warmers (faster)'),
             ])
             ->setHelp(<<<'EOF'
-The <info>%command.name%</info> command clears and warms up the application cache for a given environment
-and debug mode:
+                The <info>%command.name%</info> command clears and warms up the application cache for a given environment
+                and debug mode:
 
-  <info>php %command.full_name% --env=dev</info>
-  <info>php %command.full_name% --env=prod --no-debug</info>
-EOF
+                  <info>php %command.full_name% --env=dev</info>
+                  <info>php %command.full_name% --env=prod --no-debug</info>
+                EOF
             )
         ;
     }
@@ -72,6 +75,8 @@ EOF
         $io = new SymfonyStyle($input, $output);
 
         $kernel = $this->getApplication()->getKernel();
+        // resolve the console listeners now, the container they are loaded from is about to be cleared
+        $dispatcher = $this->createConsoleDispatcher($kernel->getContainer());
         $realCacheDir = $kernel->getContainer()->getParameter('kernel.cache_dir');
         $realBuildDir = $kernel->getContainer()->hasParameter('kernel.build_dir') ? $kernel->getContainer()->getParameter('kernel.build_dir') : $realCacheDir;
         // the old cache dir name must not be longer than the real one to avoid exceeding
@@ -80,7 +85,7 @@ EOF
         $fs->remove($oldCacheDir);
 
         if (!is_writable($realCacheDir)) {
-            throw new RuntimeException(sprintf('Unable to write in the "%s" directory.', $realCacheDir));
+            throw new RuntimeException(\sprintf('Unable to write in the "%s" directory.', $realCacheDir));
         }
 
         $useBuildDir = $realBuildDir !== $realCacheDir;
@@ -89,7 +94,7 @@ EOF
             $fs->remove($oldBuildDir);
 
             if (!is_writable($realBuildDir)) {
-                throw new RuntimeException(sprintf('Unable to write in the "%s" directory.', $realBuildDir));
+                throw new RuntimeException(\sprintf('Unable to write in the "%s" directory.', $realBuildDir));
             }
 
             if ($this->isNfs($realCacheDir)) {
@@ -100,14 +105,14 @@ EOF
             $fs->mkdir($realCacheDir);
         }
 
-        $io->comment(sprintf('Clearing the cache for the <info>%s</info> environment with debug <info>%s</info>', $kernel->getEnvironment(), var_export($kernel->isDebug(), true)));
+        $io->comment(\sprintf('Clearing the cache for the <info>%s</info> environment with debug <info>%s</info>', $kernel->getEnvironment(), var_export($kernel->isDebug(), true)));
         if ($useBuildDir) {
             $this->cacheClearer->clear($realBuildDir);
         }
         $this->cacheClearer->clear($realCacheDir);
 
         // The current event dispatcher is stale, let's not use it anymore
-        $this->getApplication()->setDispatcher(new EventDispatcher());
+        $this->getApplication()->setDispatcher($dispatcher);
 
         $containerFile = (new \ReflectionObject($kernel->getContainer()))->getFileName();
         $containerDir = basename(\dirname($containerFile));
@@ -170,6 +175,11 @@ EOF
                 $fs->rename($realBuildDir, $oldBuildDir);
             }
 
+            // Under load, a concurrent request can boot the kernel and rebuild the cache
+            // in $realBuildDir while it is moved aside above. Drop that partial rebuild,
+            // the warmed-up directory supersedes it.
+            $fs->remove($realBuildDir);
+
             $fs->rename($warmupDir, $realBuildDir);
 
             if ($output->isVerbose()) {
@@ -199,7 +209,7 @@ EOF
             $io->comment('Finished');
         }
 
-        $io->success(sprintf('Cache for the "%s" environment (debug=%s) was successfully cleared.', $kernel->getEnvironment(), var_export($kernel->isDebug(), true)));
+        $io->success(\sprintf('Cache for the "%s" environment (debug=%s) was successfully cleared.', $kernel->getEnvironment(), var_export($kernel->isDebug(), true)));
 
         return 0;
     }
@@ -250,5 +260,23 @@ EOF
         if ($preload && file_exists($preloadFile = $warmupDir.'/'.$kernel->getContainer()->getParameter('kernel.container_class').'.preload.php')) {
             Preloader::append($preloadFile, $preload);
         }
+    }
+
+    private function createConsoleDispatcher(ContainerInterface $container): EventDispatcher
+    {
+        $dispatcher = new EventDispatcher();
+        $currentDispatcher = $container->has('event_dispatcher') ? $container->get('event_dispatcher') : null;
+
+        if (!$currentDispatcher instanceof EventDispatcherInterface) {
+            return $dispatcher;
+        }
+
+        foreach ([ConsoleEvents::ERROR, ConsoleEvents::SIGNAL, ConsoleEvents::TERMINATE] as $eventName) {
+            foreach ($currentDispatcher->getListeners($eventName) as $listener) {
+                $dispatcher->addListener($eventName, $listener, $currentDispatcher->getListenerPriority($eventName, $listener) ?? 0);
+            }
+        }
+
+        return $dispatcher;
     }
 }
