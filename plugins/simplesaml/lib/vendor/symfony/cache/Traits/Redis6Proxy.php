@@ -25,7 +25,9 @@ class_exists(\Symfony\Component\VarExporter\Internal\LazyObjectState::class);
  */
 class Redis6Proxy extends \Redis implements ResetInterface, LazyObjectInterface
 {
-    use Redis6ProxyTrait;
+    use Redis61ProxyTrait;
+    use Redis62ProxyTrait;
+    use Redis63ProxyTrait;
     use LazyProxyTrait {
         resetLazyObject as reset;
     }
@@ -34,7 +36,7 @@ class Redis6Proxy extends \Redis implements ResetInterface, LazyObjectInterface
 
     public function __construct($options = null)
     {
-        return ($this->lazyObjectState->realInstance ??= ($this->lazyObjectState->initializer)())->__construct(...\func_get_args());
+        ($this->lazyObjectState->realInstance ??= ($this->lazyObjectState->initializer)())->__construct(...\func_get_args());
     }
 
     public function _compress($value): string
